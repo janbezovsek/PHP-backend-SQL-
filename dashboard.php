@@ -52,6 +52,7 @@ $notes = $stmt->fetchAll(PDO::FETCH_ASSOC);
             background-color: #f2f2f2;
         }
     </style>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
 </head>
 <body>
     <h2>Welcome, <?php echo htmlspecialchars($_SESSION['username']); ?>!</h2>
