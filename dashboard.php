@@ -1,6 +1,10 @@
 <?php
-session_start();
+// Ensure session is started
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 require 'db_connect.php';
+require 'csrf.php';
 
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
@@ -10,54 +14,69 @@ if (!isset($_SESSION['user_id'])) {
 
 // Handle note submission (add new note)
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['note_text']) && !isset($_POST['edit_note_id'])) {
-    $note_text = trim($_POST['note_text']);
-    $user_id = $_SESSION['user_id'];
-
-    // Validate input
-    if (empty($note_text)) {
-        $error = "Note cannot be empty.";
+    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+        $error = "Invalid or expired CSRF token.";
     } else {
-        // Insert note
-        $stmt = $pdo->prepare("INSERT INTO notes (user_id, note_text) VALUES (?, ?)");
-        if ($stmt->execute([$user_id, $note_text])) {
-            $success = "Note added successfully!";
+        $note_text = trim($_POST['note_text']);
+        $user_id = $_SESSION['user_id'];
+
+        // Validate input
+        if (empty($note_text)) {
+            $error = "Note cannot be empty.";
         } else {
-            $error = "Failed to add note. Try again.";
+            // Insert note
+            $stmt = $pdo->prepare("INSERT INTO notes (user_id, note_text) VALUES (?, ?)");
+            if ($stmt->execute([$user_id, $note_text])) {
+                $success = "Note added successfully!";
+                regenerateCsrfToken(); // Regenerate token on success
+            } else {
+                $error = "Failed to add note. Try again.";
+            }
         }
     }
 }
 
 // Handle note update
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_note_id'])) {
-    $note_id = $_POST['edit_note_id'];
-    $note_text = trim($_POST['note_text']);
-    $user_id = $_SESSION['user_id'];
-
-    // Validate input
-    if (empty($note_text)) {
-        $error = "Note cannot be empty.";
+    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+        $error = "Invalid or expired CSRF token.";
     } else {
-        // Update note
-        $stmt = $pdo->prepare("UPDATE notes SET note_text = ? WHERE id = ? AND user_id = ?");
-        if ($stmt->execute([$note_text, $note_id, $user_id])) {
-            $success = "Note updated successfully!";
+        $note_id = $_POST['edit_note_id'];
+        $note_text = trim($_POST['note_text']);
+        $user_id = $_SESSION['user_id'];
+
+        // Validate input
+        if (empty($note_text)) {
+            $error = "Note cannot be empty.";
         } else {
-            $error = "Failed to update note. Try again.";
+            // Update note
+            $stmt = $pdo->prepare("UPDATE notes SET note_text = ? WHERE id = ? AND user_id = ?");
+            if ($stmt->execute([$note_text, $note_id, $user_id])) {
+                $success = "Note updated successfully!";
+                regenerateCsrfToken(); // Regenerate token on success
+            } else {
+                $error = "Failed to update note. Try again.";
+            }
         }
     }
 }
 
 // Handle note deletion
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_note_id'])) {
-    $note_id = $_POST['delete_note_id'];
-    $user_id = $_SESSION['user_id'];
-
-    // Delete note
-    $stmt = $pdo->prepare("DELETE FROM notes WHERE id = ? AND user_id = ?");
-    if ($stmt->execute([$note_id, $user_id])) {
-        $success = "Note deleted successfully!";
+    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+        $error = "Invalid or expired CSRF token.";
     } else {
-        $error = "Failed to delete note. Try again.";
+        $note_id = $_POST['delete_note_id'];
+        $user_id = $_SESSION['user_id'];
+
+        // Delete note
+        $stmt = $pdo->prepare("DELETE FROM notes WHERE id = ? AND user_id = ?");
+        if ($stmt->execute([$note_id, $user_id])) {
+            $success = "Note deleted successfully!";
+            regenerateCsrfToken(); // Regenerate token on success
+        } else {
+            $error = "Failed to delete note. Try again.";
+        }
     }
 }
 
@@ -114,6 +133,7 @@ if (isset($_GET['edit_note_id'])) {
     <?php if (isset($error)) echo "<p style='color:red;'>$error</p>"; ?>
     <?php if (isset($success)) echo "<p style='color:green;'>$success</p>"; ?>
     <form method="POST" action="">
+        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(generateCsrfToken()); ?>">
         <?php if ($edit_mode): ?>
             <input type="hidden" name="edit_note_id" value="<?php echo $edit_note['id']; ?>">
         <?php endif; ?>
@@ -147,6 +167,7 @@ if (isset($_GET['edit_note_id'])) {
                             <input type="submit" value="Edit" class="action-btn">
                         </form>
                         <form method="POST" action="" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this note?');">
+                            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(generateCsrfToken()); ?>">
                             <input type="hidden" name="delete_note_id" value="<?php echo $note['id']; ?>">
                             <input type="submit" value="Delete" class="action-btn">
                         </form>
